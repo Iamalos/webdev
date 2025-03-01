@@ -1,0 +1,59 @@
+# Ignore Jupyter Notebook temporary files
+.ipynb_checkpoints/
+
+# Ignore Python compiled files
+*.pyc
+*.pyo
+__pycache__/
+
+# Ignore environment or dependency files
+.env
+.venv/
+*.env
+*.venv
+*.virtualenv
+Pipfile
+Pipfile.lock
+poetry.lock
+*.json
+
+# Ignore Jupyter configuration and settings
+.jupyter/
+.jupyterlab/
+
+# Ignore OS-specific files
+.DS_Store       # macOS
+Thumbs.db       # Windows
+
+# Ignore IDE-specific files
+.vscode/
+.idea/
+
+# Ignore logs and debug files
+*.log
+
+# Ignore virtual machine and container files
+.vagrant/
+*.dockerignore
+Dockerfile
+
+# Telethon session files (SQLite database files)
+*.session
+*.session-journal
+
+# Ignore folders that start with underscore
+_*/
+
+# Ignore vim swap files
+*.swp
+*.swo
+*.swn
+
+# Ignore SQLite database files
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.sqlite-shm
+*.sqlite-wal
+
