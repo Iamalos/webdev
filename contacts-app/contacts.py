@@ -80,24 +80,31 @@ def view_contact_modal(contact):
         open=True  # This ensures the modal opens automatically
     )
 
-# %% Contacts_v2.ipynb 10
-def contact_form(contact=None, action="/contacts/create"):
+# %% Contacts_v2.ipynb 11
+def contact_form(contact=None, action="/contacts/create", errors=None):
     """Reusable form that works both for new and edit"""
+
+    # parse errors if they exist
+    errors = json.loads(contact.errors) if contact else {}
+
     return Form(
         Grid(
-            LabelInput("First Name", id="first", value=contact.first if contact else ""),
-            LabelInput("Last Name", id="last", value=contact.last if contact else ""),
-            cols=2
-        ),
+            Div(
+                LabelInput("First Name", id="first", placeholder="First Name", value=contact.first if contact else ""),
+                P(errors.get("first", ""), cls="text-error text-sm mt-1") if "first" in errors else None),
+            Div(
+                LabelInput("Last Name", id="last", placeholder="Last Name", value=contact.last if contact else "")),
+            cols=2),
         Grid(
-            LabelInput("Phone", id="phone", value=contact.phone if contact else ""),
-            LabelInput("Email", id="email", value=contact.email if contact else ""),
-            cols=2
-        ),
+            Div(
+                LabelInput("Phone", id="phone", placeholder='Phone', value=contact.phone if contact else "")),
+            Div(
+                LabelInput("Email", id="email", placeholder='Email', value=contact.email if contact else ""),
+                P(errors.get("email",""), cls="text-error text-sm mt-1") if "email" in errors else None),
+            cols=2),
         DivRAligned(
             ModalCloseButton("Cancel", cls=ButtonT.ghost),
-            Button("Save", cls=ButtonT.primary, type="submit")
-        ),
+            Button("Save", cls=ButtonT.primary, type="submit")),
         hx_post=action,
         hx_target="#modal-container"
     )
@@ -115,41 +122,37 @@ def get():
 @rt("/dismiss-toast")
 def get(): return Div(id="success-toast")  
 
+#Try routing to /new as in the book
 @rt("/contacts/create")
-def post(first:str, last:str, phone:str, email:str):
-    """Create a new contact, show a success toast and update table with contacts"""
-    new_contact = Contact(first=first, last=last, phone=phone, email=email)
-    contacts.insert(new_contact)
+def post(contact: Contact):
+    """Create a new contact, show a success toast and update contacts table"""
+
+    errors = {}
+    if not contact.first: errors["first"] = "First name is required"
+    if not contact.email: errors["email"] = "Email is required"
+    elif any(c.email == contact.email for c in contacts()): errors["email"] = "Email already exists" 
+    print(errors)
+
+    if errors: 
+        contact.errors = json.dumps(errors)
+        return Modal(contact_form(contact, '/contacts/create'), header=ModalHeader(H3("Add Contact")), id="contact-modal", open=True)
+
+    # if validation passes, insert the contact
+    contacts.insert(contact)
 
     # create an out-of-band replacement for the contacts table
-    updated_table = Div(
-        contacts_table(),  # Get the refreshed table
-        id="contacts-table",
-        hx_swap_oob="true"  # Mark this for out-of-band swap
-    )
+    updated_table = Div(contacts_table(),id="contacts-table", hx_swap_oob="true")
 
     # Create a toast notification that appears in the center of the screen
     success_toast = Toast(
-        DivLAligned(
-            UkIcon("check-circle", cls='ml-2 text-success'),
-            Span("Contact added successfully!")
-        ),
-        id="success-toast",
-        alert_cls=AlertT.success,
-        cls=(ToastHT.center, ToastVT.middle),
-        hx_swap_oob="true",
-        hx_get="/dismiss-toast",
-        hx_trigger="load delay:3s",
-        hx_target="#success-toast"
-    )
+        DivLAligned(UkIcon("check-circle", cls='ml-2 text-success'), Span("Contact added successfully!")),
+        id="success-toast", alert_cls=AlertT.success, cls=(ToastHT.center, ToastVT.middle), hx_swap_oob="true",
+        hx_get="/dismiss-toast", hx_trigger="load delay:3s", hx_target="#success-toast")
     
     # Return both components
-    return Div(
-        updated_table,
-        success_toast
-    )
+    return Div(updated_table, success_toast)
 
-# %% Contacts_v2.ipynb 11
+# %% Contacts_v2.ipynb 12
 @rt("/")
 def get(): return Redirect("/contacts")
 
@@ -161,33 +164,22 @@ def get(id:int): return view_contact_modal(contacts[id])
 def get(q:str=None):
     search = Form(
         DivHStacked(
-            Input(name="q", value=q, placeholder="Search contacts...",
-                cls="w-full md:w-2/3 lg:w-1/2",
-                hx_get="/contacts/search",
-                hx_trigger="keyup changed delay:500ms",
-                hx_target="#contacts-table",
-                hx_include='[name="q"]'),
+            Input(name="q", value=q, placeholder="Search contacts...", cls="w-full md:w-2/3 lg:w-1/2", hx_get="/contacts/search",
+                  hx_trigger="keyup changed delay:500ms", hx_target="#contacts-table", hx_include='[name="q"]'),
             Button("Search", type="submit")
        ),
        cls="mt-8"
     )
-    return Container(page_heading, search, contacts_table(q),
-                     add_button, Div(id="modal-container"), Div(id="success-toast"))
+    return Container(page_heading, search, contacts_table(q), add_button, Div(id="modal-container"), Div(id="success-toast"))
 
 @rt("/contacts/search")
 def get(q: str = ''): return contacts_table(q)
 
-# %% Contacts_v2.ipynb 13
+# %% Contacts_v2.ipynb 14
 page_heading = Div(cls="space-y-2")(H1("Contacts"), P("Manage your contacts!", cls=TextPresets.muted_sm))
 
 add_button = DivLAligned(
-    Button(
-        UkIcon("plus-circle", cls="mr-2"),
-        "Add Contact",
-        cls=ButtonT.primary,
-        hx_get="/contacts/new",
-        hx_target="#modal-container"
-    ),
+    Button(UkIcon("plus-circle", cls="mr-2"), "Add Contact", cls=ButtonT.primary, hx_get="/contacts/new", hx_target="#modal-container"),
     cls="mb-4 mt-4"
 )
 
