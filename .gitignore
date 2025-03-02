@@ -56,4 +56,6 @@ _*/
 *.db-journal
 *.sqlite-shm
 *.sqlite-wal
-
+*.sesskey
+*.db-shm
+*.db-wal
