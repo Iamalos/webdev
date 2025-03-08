@@ -2,7 +2,7 @@
 
 # %% auto 0
 __all__ = ['app', 'rt', 'contacts', 'Contact', 'page_heading', 'add_button', 'filter_contacts', 'contacts_table',
-           'action_buttons', 'handle_contact_save', 'contact_form', 'contact_detail', 'get', 'post']
+           'action_buttons', 'handle_contact_save', 'contact_form', 'contact_detail', 'create_toast', 'get', 'post']
 
 # %% Contacts_v2.ipynb 2
 from fasthtml.common import *
@@ -74,7 +74,6 @@ def handle_contact_save(contact, id=None):
             header=ModalHeader(H3("Edit Contact" if id else "Add Contact")),
             id="contact-modal", open=True)
 
-    # If validation passes, save the contact
     if id:
         # Update existing contact
         contact.id = id
@@ -85,16 +84,10 @@ def handle_contact_save(contact, id=None):
         contacts.insert(contact)
         message = "Contact added successfully!"
 
-    # create an out-of-band replacement for the contacts table
+    # create an out-of-band replacement for the contacts table and success toast
     updated_table = Div(contacts_table(),id="contacts-table", hx_swap_oob="true")
-
-    # Create a toast notification that appears in the center of the screen
-    success_toast = Toast(
-        DivLAligned(UkIcon("check-circle", cls='ml-2 text-success'), Span(message)),
-        id="success-toast", alert_cls=AlertT.success, cls=(ToastHT.center, ToastVT.middle), hx_swap_oob="true",
-        hx_get="/dismiss-toast", hx_trigger="load delay:3s", hx_target="#success-toast")
+    success_toast = create_toast(message)
     
-    # Return both components
     return Div(updated_table, success_toast)
 
 # %% Contacts_v2.ipynb 8
@@ -139,35 +132,44 @@ def contact_form(contact=None, action="/contacts/create"):
 # %% Contacts_v2.ipynb 9
 def contact_detail(contact):
     """Detail view for a contact"""
-
     return Modal(
         ModalBody(
             # Use a single centered container for the entire content
             DivCentered(
-                # Name at the top, centered
                 H4(f"{contact.first or ''} {contact.last or ''}", cls=(TextT.bold, TextT.center, "mb-6")),
-                
-                # Centered container for phone row
                 DivLAligned(UkIcon('phone', cls='mr-2 text-primary'), P(contact.phone or '-'), cls="mb-4 justify-center"),
-                
-                # Centered container for email row
                 DivLAligned(UkIcon('mail', cls='mr-2 text-primary'), P(contact.email or '-'), cls="justify-center"),
-                
-                # Make sure the outer container allows vertical stacking
                 cls="items-center py-4"
             )
         ),
         header = ModalHeader(H3("Contact Details")),
         footer = DivFullySpaced(
             ModalCloseButton("Close", cls=ButtonT.primary),
-            Button(UkIcon("pencil", cls="mr-2"), "Edit", cls=ButtonT.primary, hx_get=f"/contacts/{contact.id}/edit", 
-                   hx_target="#modal-container")
+            Button(UkIcon("pencil", cls="mr-2"), "Edit", cls=ButtonT.primary, hx_get=f"/contacts/{contact.id}/edit", hx_target="#modal-container")
         ),    
         id = "contact-modal",
         open=True  # This ensures the modal opens automatically
     )
 
-# %% Contacts_v2.ipynb 11
+# %% Contacts_v2.ipynb 10
+def create_toast(msg, #  The message to display in the toast
+                 icon="check-circle", # Name of the icon to display (from Lucide icons)
+                 alert_type=AlertT.success, # The type of alert (success, warning, error, info)
+                 position=(ToastHT.center, ToastVT.middle)): # Tuple of horizontal and vertical position classes
+    """Creates a standardized toast notification configured for out-of-band swapping"""
+    icon_color = {
+        AlertT.success: TextT.success,
+        AlertT.warning: TextT.warning,
+        AlertT.error: TextT.error,
+        AlertT.info: TextT.info
+    }.get(alert_type, TextT.primary)
+
+    return Toast(
+        DivLAligned(UkIcon(icon,cls=f"mr-2 {icon_color}"), Span(msg)),
+        id="toast", alert_cls=alert_type, cls=position, hx_swap_oob=True, hx_get="/dismiss-toast", hx_trigger="load delay:3s", hx_target="#toast"
+    )
+
+# %% Contacts_v2.ipynb 12
 page_heading = Div(cls="space-y-2")(H1("Contacts"), P("Manage your contacts!", cls=TextPresets.muted_sm))
 
 add_button = DivLAligned(
@@ -175,10 +177,11 @@ add_button = DivLAligned(
     cls="mb-4 mt-4"
 )
 
-# %% Contacts_v2.ipynb 13
+# %% Contacts_v2.ipynb 14
 @rt("/")
 def get(): return Redirect("/contacts")
 
+# We can also use htmx_post instrad of htmx_get and sklip hx_include
 @rt("/contacts")
 def get(q:str=None):
     search = Form(
@@ -189,12 +192,12 @@ def get(q:str=None):
        ),
        cls="mt-8"
     )
-    return Container(page_heading, search, contacts_table(q), add_button, Div(id="modal-container"), Div(id="success-toast"))
+    return Container(page_heading, search, contacts_table(q), add_button, Div(id="modal-container"), Div(id="toast"))
 
 @rt("/contacts/search")
 def get(q: str = ''): return contacts_table(q)
 
-# %% Contacts_v2.ipynb 15
+# %% Contacts_v2.ipynb 16
 @rt("/contacts/{id:int}/edit")
 def get(id:int):
     contact=contacts[id]
@@ -206,11 +209,12 @@ def get(id:int):
         open=True
     )
 
+# %% Contacts_v2.ipynb 17
 @rt("/contacts/{id:int}/update")
 def post(id: int, contact: Contact):
     return handle_contact_save(contact, id)
 
-# %% Contacts_v2.ipynb 17
+# %% Contacts_v2.ipynb 19
 @rt("/contacts/new")
 def get():
     """Create a modal for adding a contact"""
@@ -222,17 +226,17 @@ def get():
     )
 
 @rt("/dismiss-toast")
-def get(): return Div(id="success-toast")  
+def get(): return Div(id="toast")  
 
-# %% Contacts_v2.ipynb 18
+# %% Contacts_v2.ipynb 20
 #Try routing to /new as in the book
 @rt("/contacts/create")
 def post(contact: Contact):
     return handle_contact_save(contact)
 
-# %% Contacts_v2.ipynb 20
+# %% Contacts_v2.ipynb 22
 @rt("/contacts/{id:int}")
 def get(id:int): return contact_detail(contacts[id])
 
-# %% Contacts_v2.ipynb 29
+# %% Contacts_v2.ipynb 32
 serve()
