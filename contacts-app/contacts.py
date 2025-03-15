@@ -80,6 +80,7 @@ def handle_contact_save(contact, id=None):
 
     if errors: 
         contact.errors = json.dumps(errors)
+        if id is not None: contact.id = id
         action = '/contacts/create' if id is None else f'/contacts/{id}/update'
         return Modal(
             contact_form(contact, action), 
@@ -108,7 +109,7 @@ def contact_form(contact=None, action="/contacts/create"):
 
     # parse errors if they exist
     errors = json.loads(contact.errors) if contact and contact.errors else {}
-    is_edit = contact and hasattr(contact, "id") and contact.id
+    is_edit = (contact and hasattr(contact, "id") and contact.id) or ("/update" in action)
     contact_id = contact.id if is_edit else None
 
     delete_button = Button(
