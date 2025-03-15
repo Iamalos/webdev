@@ -108,8 +108,8 @@ def contact_form(contact=None, action="/contacts/create"):
 
     # parse errors if they exist
     errors = json.loads(contact.errors) if contact and contact.errors else {}
-
     is_edit = contact and hasattr(contact, "id") and contact.id
+    contact_id = contact.id if is_edit else None
 
     delete_button = Button(
         UkIcon("trash-2", cls=(TextT.error, "text-white mr-2")), "Delete", cls=ButtonT.destructive, 
@@ -128,8 +128,11 @@ def contact_form(contact=None, action="/contacts/create"):
             Div(
                 LabelInput("Phone", id="phone", placeholder="Phone", value=contact.phone if contact else "")),
             Div(
-                LabelInput("Email", id="email", type="email", placeholder="Email", value=contact.email if contact else ""),
-                P(errors.get("email",""), cls=(TextT.error, TextT.sm,"mt-1")) if "email" in errors else None),
+                LabelInput("Email", id="email", type="email", placeholder="Email", value=contact.email if contact else "",
+                           hx_post="/validate/email", hx_trigger="blur", hx_target="#email-error", hx_include="this",
+                           hx_vals=json.dumps({"id": contact_id}) if contact_id else None),
+                Div(P(errors.get("email",""), cls=(TextT.error, TextT.sm,"mt-1"))
+                    if "email" in errors else None, id="email-error")),
             cols=2),
         
         DivFullySpaced(
@@ -192,7 +195,7 @@ add_button = DivLAligned(
 @rt("/")
 def get(): return Redirect("/contacts")
 
-# We can also use htmx_post instrad of htmx_get and sklip hx_include
+# We can also use htmx_post instrad of htmx_get and skip hx_include
 @rt("/contacts")
 def get(q:str=None):
     search = Form(
@@ -239,6 +242,25 @@ def get(): return Div(id="toast")
 
 # %% Contacts_v2.ipynb 23
 #Try routing to /new as in the book
+
+@rt("/validate/email")
+def post(email: str, id: int = None):
+    """Validate email field and return error message if invalid"""
+    # Create a temporary contact with just the email
+    temp_contact = Contact(email=email)
+    
+    # Run email-specific validation
+    if not email:
+        return P("Email is required", cls=(TextT.error, TextT.sm))
+    
+    # Check for duplicate email
+    if any(c.email == email and (id is None or c.id != id) for c in contacts()):
+        return P("Email already exists", cls=(TextT.error, TextT.sm))
+    
+    # No error - return empty div
+    return Div()
+
+
 @rt("/contacts/create")
 def post(contact: Contact):
     return handle_contact_save(contact)
