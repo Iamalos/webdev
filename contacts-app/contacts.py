@@ -2,8 +2,8 @@
 
 # %% auto 0
 __all__ = ['app', 'rt', 'db', 'contacts', 'page_heading', 'add_button', 'Contact', 'filter_contacts', 'contacts_table',
-           'action_buttons', 'validate_contact', 'handle_contact_save', 'contact_form', 'contact_detail',
-           'create_toast', 'get', 'post', 'delete']
+           'action_buttons', 'handle_contact_save', 'contact_form', 'contact_detail', 'create_toast',
+           'load_more_button', 'get', 'post', 'delete']
 
 # %% Contacts_v2.ipynb 2
 from fasthtml.common import *
@@ -50,19 +50,29 @@ if not contacts():
     with open("contacts.json","r") as f: data = json.load(f)
     contacts.insert_all(data)
 
-# %% Contacts_v2.ipynb 11
-def filter_contacts(q=None):
+# %% Contacts_v2.ipynb 13
+def filter_contacts(q=None, page=1, items_per_page=10):
     """Filter contacts that have `q` in first name, last name or email"""
-    if not q: return contacts(order_by="id")
-    q = q.lower()
-    return [o for o in contacts(order_by="id")
+    if not q: all_contacts = contacts(order_by="id")
+    else:
+        q = q.lower()
+        all_contacts = [o for o in contacts(order_by="id")
             if q in (o.first or "").lower()
             or q in (o.last or "").lower()
             or q in (o.email or "").lower()]
 
-def contacts_table(q=None):
-    """Create a table with contacts applying a filter is query was provided"""
-    rows = filter_contacts(q)
+    # Calculate start and end indices for pagination
+    start = (page - 1) * items_per_page
+    end = start + items_per_page
+    
+    # Return the slice for the current page
+    return all_contacts[start:end], len(all_contacts)
+   
+
+# %% Contacts_v2.ipynb 15
+def contacts_table(q=None, page=1, items_per_page=10):
+    "Create a table with contacts applying a filter is query was provided"
+    rows, total_contacts = filter_contacts(q, page, items_per_page)
     return Table(
         Thead(
             Tr(*[Th(col) for col in ["First", "Last", "Phone", "Email", "Actions"]])
@@ -74,7 +84,9 @@ def contacts_table(q=None):
                 Td(c.phone or ""),
                 Td(c.email or ""),
                 Td(action_buttons(c))
-            ) for c in rows]
+            ) for c in rows],
+            # Add the load more button
+            load_more_button(q, page, total_contacts, items_per_page)
         ),
         cls=(TableT.hover, TableT.divider, TableT.responsive),
         id="contacts-table")
@@ -85,24 +97,7 @@ def action_buttons(contact):
         Button(UkIcon("eye", cls="mr-2"), "View", cls=ButtonT.ghost, hx_get=f'/contacts/{contact.id}', hx_target='#modal-container'),
         Button(UkIcon("pencil", cls="mr-2"),"Edit", cls=ButtonT.ghost, hx_get=f'/contacts/{contact.id}/edit', hx_target='#modal-container'))
 
-# %% Contacts_v2.ipynb 13
-def validate_contact(contact, # The contact object to validate
-                     id=None # Optional ID for existing contacts (to check email uniqueness)
-                    ):
-    """ Validates contact data and returns a dictionary of errors."""
-    errors = {}
-    if not contact.first: errors["first"] = "First name is required"
-    if not contact.email: errors["email"] = "Email is required"
-    elif any(c.email == contact.email and (c.id != id) for c in contacts()): errors["email"] = "Email already exists" 
-    
-    # Additional validations could be added here:
-    # - Email format validation
-    # - Phone number format validation
-    # - Name length restrictions
-    # - etc.
-    return errors
-
-# %% Contacts_v2.ipynb 15
+# %% Contacts_v2.ipynb 18
 def handle_contact_save(contact, id=None):
     "Common logic for saving a contact (create or update)"
     errors = contact.validate()
@@ -134,7 +129,7 @@ def handle_contact_save(contact, id=None):
     
     return Div(updated_table, success_toast)
 
-# %% Contacts_v2.ipynb 16
+# %% Contacts_v2.ipynb 20
 def contact_form(contact=None, action="/contacts/create"):
     """Reusable form that works both for new and edit"""
 
@@ -180,7 +175,7 @@ def contact_form(contact=None, action="/contacts/create"):
         hx_post=action, hx_target="#modal-container", hx_vals=json.dumps({"id": contact_id}) if contact_id else None
     )
 
-# %% Contacts_v2.ipynb 17
+# %% Contacts_v2.ipynb 22
 def contact_detail(contact):
     """Detail view for a contact"""
     return Modal(
@@ -201,7 +196,7 @@ def contact_detail(contact):
         id = "contact-modal",
         open=True)
 
-# %% Contacts_v2.ipynb 18
+# %% Contacts_v2.ipynb 24
 def create_toast(msg, #  The message to display in the toast
                  icon="check-circle", # Name of the icon to display (from Lucide icons)
                  alert_type=AlertT.success, # The type of alert (success, warning, error, info)
@@ -218,14 +213,39 @@ def create_toast(msg, #  The message to display in the toast
         DivLAligned(UkIcon(icon,cls=f"mr-2 {icon_color}"), Span(msg)),
         id="toast", alert_cls=alert_type, cls=position, hx_swap_oob="true", hx_get="/dismiss-toast", hx_trigger="load delay:3s", hx_target="#toast")
 
-# %% Contacts_v2.ipynb 20
+# %% Contacts_v2.ipynb 26
 page_heading = Div(cls="space-y-2")(H1("Contacts"), P("Manage your contacts!", cls=TextPresets.muted_sm))
 
 add_button = DivLAligned(
     Button(UkIcon("plus-circle", cls="mr-2"), "Add Contact", cls=ButtonT.primary, hx_get="/contacts/new", hx_target="#modal-container"),
     cls="mb-4 mt-4")
 
-# %% Contacts_v2.ipynb 22
+# %% Contacts_v2.ipynb 27
+def load_more_button(q=None, current_page=1, total_contacts=0, items_per_page=10):
+    "Creates a 'Load More' button row for the contacts table"
+    displayed_contacts = current_page * items_per_page
+    has_more = displayed_contacts < total_contacts
+
+    if not has_more: return Tr(Td("No more contacts to load", colspan="5", cls=TextT.center))
+
+    return Tr(
+        Td(
+            Button(
+                "Load More",
+                cls=ButtonT.primary,
+                hx_get="/contacts/load-more",
+                hx_include="[name=q]", # include search query if any
+                hx_vals=json.dumps({"page":current_page+1}),
+                hx_swap="outerHTML",
+                hx_target="#load-more-container"  # Target the entire row, not just the button
+            ),
+            colspan="5", 
+            cls=TextT.center
+        ),
+        id="load-more-container"
+    )
+
+# %% Contacts_v2.ipynb 30
 @rt("/")
 def get(): return Redirect("/contacts")
 
@@ -238,13 +258,13 @@ def get(q:str=None):
                   hx_trigger="keyup changed delay:500ms", hx_target="#contacts-table", hx_include='[name="q"]'),
             Button("Search", type="submit")),
        cls="mt-8")
-    return Container(page_heading, search, contacts_table(q), add_button, Div(id="modal-container"), Div(id="toast"))
+    return Container(page_heading, search, contacts_table(q, page=1), add_button, Div(id="modal-container"), Div(id="toast"))
 
-# %% Contacts_v2.ipynb 24
+# %% Contacts_v2.ipynb 32
 @rt("/contacts/search")
-def get(q: str = ''): return contacts_table(q)
+def get(q: str = ''): return contacts_table(q, page=1)
 
-# %% Contacts_v2.ipynb 26
+# %% Contacts_v2.ipynb 34
 @rt("/contacts/{id:int}/edit")
 def get(id:int):
     contact=contacts[id]
@@ -255,12 +275,12 @@ def get(id:int):
         id="contact-modal",
         open=True)
 
-# %% Contacts_v2.ipynb 27
+# %% Contacts_v2.ipynb 35
 @rt("/contacts/{id:int}/update")
 def post(id: int, contact: Contact):
     return handle_contact_save(contact, id)
 
-# %% Contacts_v2.ipynb 29
+# %% Contacts_v2.ipynb 37
 @rt("/contacts/new")
 def get():
     """Create a modal for adding a contact"""
@@ -274,7 +294,7 @@ def get():
 @rt("/dismiss-toast")
 def get(): return Div(id="toast")  
 
-# %% Contacts_v2.ipynb 30
+# %% Contacts_v2.ipynb 38
 #Try routing to /new as in the book
 
 @rt("/validate/email")
@@ -298,11 +318,11 @@ def post(email: str, id: int = None):
 def post(contact: Contact):
     return handle_contact_save(contact)
 
-# %% Contacts_v2.ipynb 32
+# %% Contacts_v2.ipynb 40
 @rt("/contacts/{id:int}")
 def get(id:int): return contact_detail(contacts[id])
 
-# %% Contacts_v2.ipynb 34
+# %% Contacts_v2.ipynb 42
 @rt("/contacts/{id:int}/confirm")
 def get(id:int):
     """Confirmation modal for deleting a contact"""
@@ -337,5 +357,29 @@ def delete(id:int):
     
     return Div(updated_table, success_toast)
 
-# %% Contacts_v2.ipynb 41
+# %% Contacts_v2.ipynb 44
+@rt("/contacts/load-more")
+def get(q: str = None, page: int = 1):
+    """Handle loading more contacts"""
+    items_per_page = 10
+    rows, total_contacts = filter_contacts(q, page, items_per_page)
+    
+    # Create table rows for the new contacts
+    contact_rows = [
+        Tr(
+            Td(c.first or ""),
+            Td(c.last or ""),
+            Td(c.phone or ""),
+            Td(c.email or ""),
+            Td(action_buttons(c))
+        ) for c in rows
+    ]
+    
+    # Add the load more button at the end
+    contact_rows.append(load_more_button(q, page, total_contacts, items_per_page))
+    
+    # Return all the new rows to be swapped in place of the button
+    return contact_rows
+
+# %% Contacts_v2.ipynb 54
 serve()
