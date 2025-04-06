@@ -2,7 +2,7 @@
 
 # %% auto 0
 __all__ = ['app', 'rt', 'db', 'contacts', 'page_heading', 'add_button', 'Contact', 'filter_contacts', 'contacts_table',
-           'action_buttons', 'handle_contact_save', 'contact_form', 'contact_detail', 'create_toast',
+           'action_buttons', 'handle_contact_save', 'contact_form', 'contact_detail', 'create_toast', 'search_form',
            'load_more_button', 'get', 'post', 'delete']
 
 # %% Contacts_v2.ipynb 2
@@ -231,7 +231,21 @@ add_button = DivLAligned(
     Button(UkIcon("plus-circle", cls="mr-2"), "Add Contact", cls=ButtonT.primary, hx_get="/contacts/new", hx_target="#modal-container"),
     cls="mb-4 mt-4")
 
-# %% Contacts_v2.ipynb 28
+# %% Contacts_v2.ipynb 29
+def search_form(q=None):
+    "Create a search form with loading indicator"
+    return Form(
+        DivHStacked(
+            Input(name="q", value=q, placeholder="Search contacts...", cls="w-full md:w-2/3 lg:w-1/2", hx_get="/contacts/search",
+                  hx_trigger="keyup changed delay:500ms", hx_include="[name='q']", hx_target="#contacts-table", hx_indicator="#search-spinner"),
+            Button("Search", type="submit", hx_indicator="#search-spinner"),
+            Loading(cls=(LoadingT.spinner, LoadingT.md),htmx_indicator=True, id="search-spinner"),
+        ),
+        hx_get="/contacts/search",  # Add this to the form
+        hx_target="#contacts-table",  # Add this to the form
+        cls="mt-8")
+
+# %% Contacts_v2.ipynb 30
 def load_more_button(q=None, current_page=1, total_contacts=0, items_per_page=10):
     "Creates a 'Load More' button row for the contacts table"
     displayed_contacts = current_page * items_per_page
@@ -241,14 +255,18 @@ def load_more_button(q=None, current_page=1, total_contacts=0, items_per_page=10
 
     return Tr(
         Td(
-            Button(
-                "Load More",
-                cls=ButtonT.primary,
-                hx_get="/contacts/load-more",
-                hx_include="[name=q]", # include search query if any
-                hx_vals=json.dumps({"page":current_page+1}),
-                hx_swap="outerHTML",
-                hx_target="#load-more-container"  # Target the entire row, not just the button
+            DivHStacked(
+                Button(
+                    "Load More",
+                    cls=ButtonT.primary,
+                    hx_get="/contacts/load-more",
+                    hx_include="[name=q]", # include search query if any
+                    hx_vals=json.dumps({"page":current_page+1}),
+                    hx_swap="outerHTML",
+                    hx_target="#load-more-container",  # Target the entire row, not just the button
+                    hx_indicator="#load-more-spinner"
+                ),
+                Loading(cls=(LoadingT.spinner, LoadingT.sm), htmx_indicator=True, id="load-more-spinner"),
             ),
             colspan="5", 
             cls=TextT.center
@@ -256,26 +274,23 @@ def load_more_button(q=None, current_page=1, total_contacts=0, items_per_page=10
         id="load-more-container"
     )
 
-# %% Contacts_v2.ipynb 31
+# %% Contacts_v2.ipynb 33
 @rt("/")
 def get(): return Redirect("/contacts")
 
-# We can also use htmx_post instrad of htmx_get and skip hx_include
+# We can also use htmx_post instead of htmx_get and skip hx_include
 @rt("/contacts")
 def get(q:str=None):
-    search = Form(
-        DivHStacked(
-            Input(name="q", value=q, placeholder="Search contacts...", cls="w-full md:w-2/3 lg:w-1/2", hx_get="/contacts/search",
-                  hx_trigger="keyup changed delay:500ms", hx_target="#contacts-table", hx_include='[name="q"]'),
-            Button("Search", type="submit")),
-       cls="mt-8")
-    return Container(page_heading, search, contacts_table(q, page=1), add_button, Div(id="modal-container"), Div(id="toast"))
-
-# %% Contacts_v2.ipynb 33
-@rt("/contacts/search")
-def get(q: str = ''): return contacts_table(q, page=1)
+    return Container(page_heading, search_form(q), contacts_table(q, page=1), add_button, Div(id="modal-container"), Div(id="toast"))
 
 # %% Contacts_v2.ipynb 35
+@rt("/contacts/search")
+def get(q: str = ''): 
+    import time
+    time.sleep(2.0)
+    return contacts_table(q, page=1)
+
+# %% Contacts_v2.ipynb 37
 @rt("/contacts/{id:int}/edit")
 def get(id:int):
     contact=contacts[id]
@@ -286,12 +301,12 @@ def get(id:int):
         id="contact-modal",
         open=True)
 
-# %% Contacts_v2.ipynb 36
+# %% Contacts_v2.ipynb 38
 @rt("/contacts/{id:int}/update")
 def post(id: int, contact: Contact):
     return handle_contact_save(contact, id)
 
-# %% Contacts_v2.ipynb 38
+# %% Contacts_v2.ipynb 40
 @rt("/contacts/new")
 def get():
     """Create a modal for adding a contact"""
@@ -305,7 +320,7 @@ def get():
 @rt("/dismiss-toast")
 def get(): return Div(id="toast")  
 
-# %% Contacts_v2.ipynb 39
+# %% Contacts_v2.ipynb 41
 #Try routing to /new as in the book
 
 @rt("/validate/email")
@@ -329,11 +344,11 @@ def post(email: str, id: int = None):
 def post(contact: Contact):
     return handle_contact_save(contact)
 
-# %% Contacts_v2.ipynb 41
+# %% Contacts_v2.ipynb 43
 @rt("/contacts/{id:int}")
 def get(id:int): return contact_detail(contacts[id])
 
-# %% Contacts_v2.ipynb 43
+# %% Contacts_v2.ipynb 45
 @rt("/contacts/{id:int}/confirm")
 def get(id:int):
     """Confirmation modal for deleting a contact"""
@@ -368,10 +383,14 @@ def delete(id:int):
     
     return Div(updated_table, success_toast)
 
-# %% Contacts_v2.ipynb 45
+# %% Contacts_v2.ipynb 47
 @rt("/contacts/load-more")
 def get(q: str = None, page: int = 1):
     """Handle loading more contacts"""
+
+    import time
+    time.sleep(2)
+    
     items_per_page = 10
     rows, total_contacts = filter_contacts(q, page, items_per_page)
     
@@ -392,5 +411,5 @@ def get(q: str = None, page: int = 1):
     # Return all the new rows to be swapped in place of the button
     return contact_rows
 
-# %% Contacts_v2.ipynb 55
+# %% Contacts_v2.ipynb 57
 serve()
